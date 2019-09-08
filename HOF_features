@@ -1,0 +1,100 @@
+#
+# Canada
+# August 2019
+#
+# Oriented by: Dr. M. Shahbazi
+# Author: Liége Maldaner
+# E-mail: liege.malda@gmail.com
+#
+# Results:
+###########################################################################
+
+import cv2
+import numpy as np
+import matplotlib.pyplot as plt
+from skimage import data, color
+import pandas as pd
+import cv2
+import scipy
+#from scipy.misc import imread
+import _pickle as pickle
+import random
+import os
+from sklearn import svm
+import csv
+from os import listdir
+from os.path import isfile, join
+from openpyxl import load_workbook
+from sklearn.decomposition import PCA
+from skimage.feature import hog
+
+from skimage.feature import hog
+
+def get_hog_features(img, orient, pix_per_cell, cell_per_block,
+                     feature_vec=True):
+    features = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell),
+                   cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=True,
+                   visualise=vis, feature_vector=feature_vec)
+    return features
+
+
+# TRAINING DATA FEATURES EXTRACTION WITH ORB
+DETERMINE_CLASS = [int(0), int(1)]  # 0 for cracks and 1 for Spalls
+training_data = np.array([])
+vector_data = np.array([])
+training_data_labels = np.array([])
+class_data = np.array([])
+hog_features = []
+
+# loop for each class folder
+for classes in range(len(DETERMINE_CLASS)):
+    files_path = str(classes)
+
+    # Number of images to be processed
+    list = os.listdir(files_path)
+    number_files = len(list)
+
+    category = DETERMINE_CLASS[classes]
+
+    # So the CSV feature line number is the same as the image name (also a number)
+    for key in np.arange(0, number_files, 1):
+        # Read image
+        filename = str(key)
+        image = cv2.imread(files_path + '/' + filename + '.jpg')
+        image = cv2.resize(image, (800, 800))
+        image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        # image = color.rgb2gray(image)
+        feature_image = cv2.cvtColor(image1, cv2.COLOR_RGB2HSV)
+
+        # Process image
+        vector_data = np.array([])
+        for channel in range(feature_image.shape[2]):
+            hog_features = get_hog_features(feature_image[:, :, channel],
+                                            orient=9, pix_per_cell=8, cell_per_block=1,
+                                            vis=False, feature_vec=True)
+        # vector_data = np.ravel(hog_features)
+        vector_data = np.asarray(hog_features)
+        vector_data = vector_data.reshape(1, vector_data.shape[0])
+
+        # We need to concatenate on the full list of features extracted from each image
+        if len(training_data) == 0:
+            training_data = np.append(training_data, vector_data)
+            training_data = training_data.reshape(vector_data.shape)
+            class_data = np.append(class_data, category)
+        else:
+            training_data = np.concatenate((training_data, vector_data), axis=0)
+            class_data = np.append(class_data, category)
+
+X = training_data
+y = class_data
+
+#Apply PCA to reduce features
+pca = PCA(n_components=4)
+Xreduced = pca.fit_transform(X)
+
+#SAVE FEATURES AND CLASSES TO AN CSV FILE
+df = pd.DataFrame(Xreduced)
+df.to_csv('X_Hog.csv', index=False)
+
+df1 = pd.DataFrame(y)
+df1.to_csv('y_Hog.csv', index=False)
