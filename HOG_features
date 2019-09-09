@@ -170,7 +170,7 @@ Xreduced = pca.fit_transform(X)
 
 #SAVE FEATURES AND CLASSES TO AN CSV FILE
 df = pd.DataFrame(Xreduced)
-df.to_csv('X_HSV.csv', index=False)
+df.to_csv('X_HOG.csv', index=False)
 
 df1 = pd.DataFrame(y)
-df1.to_csv('y_HSV.csv', index=False)
+df1.to_csv('y_HOG.csv', index=False)
