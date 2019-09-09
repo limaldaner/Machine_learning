@@ -1,3 +1,5 @@
+###########################################################################
+#         HOG for crack and spalls feature extraction algorithm
 #
 # Canada
 # August 2019
@@ -26,17 +28,91 @@ from os import listdir
 from os.path import isfile, join
 from openpyxl import load_workbook
 from sklearn.decomposition import PCA
-from skimage.feature import hog
 
-from skimage.feature import hog
+def compute_gradient(image: np.ndarray):
+    """
+    Compute gradient of an image by rows and columns
+    """
+    gx = np.zeros_like(image)
+    gy = np.zeros_like(image)
+    # Central difference
+    gx[:, 1:-1] = (image[:, 2:] - image[:, :-2]) / 2
+    gy[1:-1, :] = (image[2:, :] - image[:-2, :]) / 2
 
-def get_hog_features(img, orient, pix_per_cell, cell_per_block,
-                     feature_vec=True):
-    features = hog(img, orientations=orient, pixels_per_cell=(pix_per_cell, pix_per_cell),
-                   cells_per_block=(cell_per_block, cell_per_block), transform_sqrt=True,
-                   visualise=vis, feature_vector=feature_vec)
-    return features
+    # Forward difference
+    gx[:, 0] = image[:, 1] - image[:, 0]
+    gy[0, :] = image[1, :] - image[0, :]
 
+    # Backward difference
+    gx[:, -1] = image[:, -1] - image[:, -2]
+    gy[-1, :] = image[-1, :] - image[-2, :]
+
+    return gx, gy
+
+def compute_hog_cell(n_orientations: int, magnitudes: np.ndarray, orientations: np.ndarray) -> np.ndarray:
+    """
+    Compute 1 HOG feature of a cell. Return a row vector of size `n_orientations`
+    """
+    bin_width = int(180 / n_orientations)
+    hog = np.zeros(n_orientations)
+    for i in range(orientations.shape[0]):
+        for j in range(orientations.shape[1]):
+            orientation = orientations[i, j]
+            lower_bin_idx = int(orientation / bin_width)
+            hog[lower_bin_idx] += magnitudes[i, j]
+
+    return hog / (magnitudes.shape[0] * magnitudes.shape[1])
+
+def normalize_vector(v, eps=1e-5):
+    """
+    Return a normalized vector (which has norm2 as 1)
+    """
+    # eps is used to prevent zero divide exceptions (in case v is zero)
+    return v / np.sqrt(np.sum(v ** 2) + eps ** 2)
+
+
+def compute_hog_features(image: np.ndarray,
+                             n_orientations: int = 9, pixels_per_cell: (int, int) = (8, 8),
+                             cells_per_block: (int, int) = (1, 1)) -> np.ndarray:
+    """
+    Compute HOG features of an image. Return a row vector
+    """
+    gx, gy = compute_gradient(image)
+    sy, sx = gx.shape
+    cx, cy = pixels_per_cell
+    bx, by = cells_per_block
+
+    magnitudes = np.hypot(gx, gy)  # = np.sqrt(gx**2 + gy**2)
+    orientations = np.rad2deg(np.arctan2(gy, gx)) % 180
+
+    n_cellsx = int(sx / cx)  # Number of cells in x axis
+    n_cellsy = int(sy / cy)  # Number of cells in y axis
+    n_blocksx = int(n_cellsx - bx) + 1
+    n_blocksy = int(n_cellsy - by) + 1
+
+    hog_cells = np.zeros((n_cellsx, n_cellsy, n_orientations))
+
+    prev_x = 0
+    # Compute HOG of each cell
+    for it_x in range(n_cellsx):
+        prev_y = 0
+        for it_y in range(n_cellsy):
+            magnitudes_patch = magnitudes[prev_y:prev_y + cy, prev_x:prev_x + cx]
+            orientations_patch = orientations[prev_y:prev_y + cy, prev_x:prev_x + cx]
+            hog_cells[it_y, it_x] = compute_hog_cell(n_orientations, magnitudes_patch, orientations_patch)
+
+            prev_y += cy
+        prev_x += cx
+    
+    hog_blocks_normalized = np.zeros((n_blocksx, n_blocksy, n_orientations))
+
+    # Normalize HOG by block
+    for it_blocksx in range(n_blocksx):
+        for it_blocky in range(n_blocksy):
+            hog_block = hog_cells[it_blocky:it_blocky + by, it_blocksx:it_blocksx + bx].ravel()
+            hog_blocks_normalized[it_blocky, it_blocksx] = normalize_vector(hog_block)
+
+    return hog_blocks_normalized.ravel() 
 
 # TRAINING DATA FEATURES EXTRACTION WITH ORB
 DETERMINE_CLASS = [int(0), int(1)]  # 0 for cracks and 1 for Spalls
@@ -44,11 +120,10 @@ training_data = np.array([])
 vector_data = np.array([])
 training_data_labels = np.array([])
 class_data = np.array([])
-hog_features = []
 
 # loop for each class folder
 for classes in range(len(DETERMINE_CLASS)):
-    files_path = str(classes)
+    files_path = '/home/liege/PycharmProjects/SVM/'+str(classes)
 
     # Number of images to be processed
     list = os.listdir(files_path)
@@ -61,29 +136,29 @@ for classes in range(len(DETERMINE_CLASS)):
         # Read image
         filename = str(key)
         image = cv2.imread(files_path + '/' + filename + '.jpg')
+        #print(str(classes)+filename)
         image = cv2.resize(image, (800, 800))
-        image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-        # image = color.rgb2gray(image)
-        feature_image = cv2.cvtColor(image1, cv2.COLOR_RGB2HSV)
+        image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)        
 
         # Process image
-        vector_data = np.array([])
-        for channel in range(feature_image.shape[2]):
-            hog_features = get_hog_features(feature_image[:, :, channel],
-                                            orient=9, pix_per_cell=8, cell_per_block=1,
-                                            vis=False, feature_vec=True)
-        # vector_data = np.ravel(hog_features)
-        vector_data = np.asarray(hog_features)
+        vector_data = np.array([]) #hog_features,
+        hog_features = compute_hog_features(
+            hsv_image, n_orientations=9,
+            pixels_per_cell=(8, 8),
+            cells_per_block=(1, 1))
+        vector_data = hog_features
         vector_data = vector_data.reshape(1, vector_data.shape[0])
 
         # We need to concatenate on the full list of features extracted from each image
         if len(training_data) == 0:
             training_data = np.append(training_data, vector_data)
             training_data = training_data.reshape(vector_data.shape)
+            # training_data_labels = np.append(training_data_labels,np.append(vector_data,category))
             class_data = np.append(class_data, category)
         else:
             training_data = np.concatenate((training_data, vector_data), axis=0)
             class_data = np.append(class_data, category)
+            # training_data_labels = np.append(training_data_labels,np.append(vector_data,category))
 
 X = training_data
 y = class_data
@@ -94,7 +169,7 @@ Xreduced = pca.fit_transform(X)
 
 #SAVE FEATURES AND CLASSES TO AN CSV FILE
 df = pd.DataFrame(Xreduced)
-df.to_csv('X_Hog.csv', index=False)
+df.to_csv('X_HSV.csv', index=False)
 
 df1 = pd.DataFrame(y)
-df1.to_csv('y_Hog.csv', index=False)
+df1.to_csv('y_HSV.csv', index=False)
