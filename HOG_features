@@ -139,11 +139,12 @@ for classes in range(len(DETERMINE_CLASS)):
         #print(str(classes)+filename)
         image = cv2.resize(image, (800, 800))
         image1 = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)        
-
+        image = color.rgb2gray(image)
+        
         # Process image
         vector_data = np.array([]) #hog_features,
         hog_features = compute_hog_features(
-            hsv_image, n_orientations=9,
+            image, n_orientations=9,
             pixels_per_cell=(8, 8),
             cells_per_block=(1, 1))
         vector_data = hog_features
