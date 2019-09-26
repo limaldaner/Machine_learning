@@ -1,0 +1,52 @@
+###########################################################################
+#         YOLO Detection
+#
+# Canada
+# September 2019
+#
+# Oriented by: Dr. M. Shahbazi
+# Author: Liége Maldaner
+# E-mail: liege.malda@gmail.com
+#
+# Results:
+###########################################################################
+import os
+import time
+import cv2
+import numpy as np
+
+#cd labelImg
+#python labelImg.py
+
+import glob, os
+
+
+dataset_path = '/home/liege/Downloads/jupyter/deep_learning/dataset/images'
+
+# Percentage of images to be used for the test set
+percentage_test = 10;
+
+# Create and/or truncate train.txt and test.txt
+file_train = open('train.txt', 'w')  
+file_test = open('test.txt', 'w')
+
+# Populate train.txt and test.txt
+counter = 1  
+index_test = round(100 / percentage_test)  
+for pathAndFilename in glob.iglob(os.path.join(dataset_path, "*.jpg")):  
+    title, ext = os.path.splitext(os.path.basename(pathAndFilename))
+    if counter == index_test+1:
+        counter = 1
+        file_test.write(dataset_path + "/" + title + '.jpg' + "\n")
+    else:
+        file_train.write(dataset_path + "/" + title + '.jpg' + "\n")
+        counter = counter + 1
+		
+		
+#Start training
+#cd darknet
+#colocar tudo dentro do programa darknet
+#./darknet detector train custom/trainer.data custom/yolo.cfg custom/darknet53.py
+
+##open virtual enviroment
+#source ~/my_py3_venv/bin/activate
